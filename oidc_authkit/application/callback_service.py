@@ -103,12 +103,13 @@ class CallbackService:
                 "No local user found and auto-creation is disabled"
             )
 
-        # 7. Create session principal
+        # 7. Create session principal (store id_token for RP-Initiated Logout)
         principal = SessionPrincipal(
             local_user_id=local_user.id,
             issuer=identity.issuer,
             subject=identity.subject,
             auth_time=time.time(),
+            id_token=token_set.id_token,
         )
         session_data = await self._session_store.save(principal)
 

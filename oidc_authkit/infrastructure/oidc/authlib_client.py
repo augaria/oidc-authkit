@@ -162,6 +162,11 @@ class AuthlibOIDCClient:
 
         return extract_claims(dict(claims_data))
 
+    async def get_end_session_endpoint(self) -> str | None:
+        """Get the end_session_endpoint from OIDC discovery metadata."""
+        metadata = await self._ensure_metadata()
+        return metadata.get("end_session_endpoint")
+
     async def fetch_userinfo(self, token_set: TokenSet) -> dict[str, Any]:
         """Fetch userinfo from OIDC provider."""
         metadata = await self._ensure_metadata()

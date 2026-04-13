@@ -77,6 +77,8 @@ class AuthManager:
         self.logout_service = LogoutService(
             config=config,
             hooks=self.hooks,
+            oidc_client=self.oidc_client,
+            session_store=self.session_store,
         )
 
         logger.info("AuthManager initialized for %s", config.base_url)
@@ -106,6 +108,6 @@ class AuthManager:
         """Get the current user context."""
         return await self.current_user_service.get_current_user(session_data)
 
-    async def logout(self) -> dict:
+    async def logout(self, session_data: dict[str, Any] | None = None) -> dict:
         """Logout and clear session."""
-        return await self.logout_service.logout()
+        return await self.logout_service.logout(session_data=session_data)

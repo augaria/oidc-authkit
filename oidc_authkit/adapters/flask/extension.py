@@ -174,9 +174,12 @@ class FlaskAuth:
 
         @app.route(config.logout_path)
         def _logout():
+            cookie_value = request.cookies.get(config.cookie_name)
+            session_data = {"cookie_value": cookie_value} if cookie_value else None
+
             loop = asyncio.new_event_loop()
             try:
-                result = loop.run_until_complete(manager.logout())
+                result = loop.run_until_complete(manager.logout(session_data=session_data))
             finally:
                 loop.close()
 

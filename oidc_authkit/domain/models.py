@@ -59,6 +59,7 @@ class SessionPrincipal:
     subject: str
     auth_time: float
     session_version: int = 1
+    id_token: str | None = None
 
 
 @dataclass

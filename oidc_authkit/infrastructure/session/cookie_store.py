@@ -41,6 +41,7 @@ class CookieSessionStore:
                 subject=data["sub"],
                 auth_time=data["at"],
                 session_version=data.get("sv", 1),
+                id_token=data.get("idt"),
             )
         except (KeyError, TypeError):
             logger.debug("Malformed session data")
@@ -55,6 +56,8 @@ class CookieSessionStore:
             "at": principal.auth_time,
             "sv": principal.session_version,
         }
+        if principal.id_token:
+            data["idt"] = principal.id_token
         cookie_value = self._serializer.dumps(data)
         return {
             "cookie_value": cookie_value,

@@ -122,7 +122,9 @@ def create_auth_router(manager: AuthManager, config: AuthConfig) -> APIRouter:
 
     @router.get(config.logout_path)
     async def logout(request: Request) -> RedirectResponse:
-        result = await manager.logout()
+        cookie_value = request.cookies.get(config.cookie_name)
+        session_data = {"cookie_value": cookie_value} if cookie_value else None
+        result = await manager.logout(session_data=session_data)
 
         response = RedirectResponse(url=result["redirect_to"], status_code=302)
         response.delete_cookie(
