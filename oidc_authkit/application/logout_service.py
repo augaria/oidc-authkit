@@ -56,12 +56,13 @@ class LogoutService:
         except Exception:
             end_session_endpoint = None
 
-        if end_session_endpoint and id_token:
+        if end_session_endpoint:
             post_logout_uri = self._config.base_url.rstrip("/") + self._config.post_logout_redirect_path
-            params = {
-                "id_token_hint": id_token,
+            params: dict[str, str] = {
                 "post_logout_redirect_uri": post_logout_uri,
             }
+            if id_token:
+                params["id_token_hint"] = id_token
             redirect_to = f"{end_session_endpoint}?{urlencode(params)}"
             logger.info("RP-Initiated Logout: redirecting to OIDC provider")
 
