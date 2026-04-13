@@ -1,4 +1,4 @@
-"""Logout service — clears local session and builds RP-Initiated Logout URL."""
+"""Logout service — clears local session and terminates OIDC provider session."""
 
 from __future__ import annotations
 
@@ -31,40 +31,47 @@ class LogoutService:
     async def logout(self, session_data: dict | None = None) -> dict:
         """Clear session and return logout data.
 
-        If the OIDC provider supports end_session_endpoint and we have an
-        id_token from the session, redirect to the provider to end the SSO
-        session (RP-Initiated Logout). Otherwise fall back to local-only logout.
+        Logout strategy (in priority order):
+        1. OIDC RP-Initiated Logout — if provider exposes end_session_endpoint
+           in discovery, redirect there with id_token_hint + post_logout_redirect_uri.
+        2. Provider native logout — fall back to {issuer}/logout?rd={redirect_uri}.
+           Works with Authelia and other providers that accept an `rd` parameter.
 
         Returns dict with:
-            - redirect_to: post-logout redirect target (may be the provider's end_session URL)
+            - redirect_to: post-logout redirect target
             - clear_cookie: cookie name to clear
         """
         await self._hooks.on_logout()
         logger.info("User logged out")
 
-        redirect_to = self._config.post_logout_redirect_path
+        post_logout_uri = self._config.base_url.rstrip("/") + self._config.post_logout_redirect_path
 
-        # Try RP-Initiated Logout: redirect to provider's end_session_endpoint
+        # Extract id_token from session (for id_token_hint)
         id_token = None
         if session_data:
             principal = await self._session_store.get(session_data)
             if principal and principal.id_token:
                 id_token = principal.id_token
 
+        # Strategy 1: OIDC RP-Initiated Logout (standard end_session_endpoint)
         try:
             end_session_endpoint = await self._oidc.get_end_session_endpoint()
         except Exception:
             end_session_endpoint = None
 
         if end_session_endpoint:
-            post_logout_uri = self._config.base_url.rstrip("/") + self._config.post_logout_redirect_path
             params: dict[str, str] = {
                 "post_logout_redirect_uri": post_logout_uri,
             }
             if id_token:
                 params["id_token_hint"] = id_token
             redirect_to = f"{end_session_endpoint}?{urlencode(params)}"
-            logger.info("RP-Initiated Logout: redirecting to OIDC provider")
+            logger.info("RP-Initiated Logout: redirecting to OIDC provider end_session_endpoint")
+        else:
+            # Strategy 2: Provider native logout with rd redirect parameter
+            issuer = self._config.issuer.rstrip("/")
+            redirect_to = f"{issuer}/logout?{urlencode({'rd': post_logout_uri})}"
+            logger.info("Fallback logout: redirecting to provider native logout at %s", redirect_to)
 
         return {
             "redirect_to": redirect_to,
