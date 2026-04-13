@@ -1,33 +1,35 @@
 # oidc-authkit
 
-通用 Python OIDC 认证包，为 Python Web 应用提供与 Authelia OIDC Provider 的统一集成。
+[中文文档](README.zh-CN.md)
 
-## 功能特性
+A universal Python OIDC authentication package that integrates Python web applications with OIDC providers such as Authelia.
 
-- 基于 Authelia OIDC 的登录 / 回调 / 登出
-- 当前用户识别 (`current_user`)
-- 本地用户自动映射 (find or create)
-- 登录保护装饰器 / 依赖注入
-- Group 权限检查
-- 可匿名访问支持
-- 支持 FastAPI 和 Flask
-- Cookie-based 签名会话
-- 可扩展架构（自定义 UserStore、SessionStore、OIDCClient）
+## Features
 
-## 安装
+- Login / callback / logout via OIDC
+- Current user identification (`current_user`)
+- Automatic local user mapping (find or create)
+- Login-required decorators / dependency injection
+- Group-based permission checks
+- Anonymous access support
+- FastAPI and Flask adapters
+- Cookie-based signed sessions
+- Extensible architecture (custom UserStore, SessionStore, OIDCClient)
+
+## Installation
 
 ```bash
-# FastAPI 支持
+# FastAPI support
 pip install oidc-authkit[fastapi]
 
-# Flask 支持
+# Flask support
 pip install oidc-authkit[flask]
 
-# 全部可选依赖
+# All optional dependencies
 pip install oidc-authkit[all]
 ```
 
-## 快速开始
+## Quick Start
 
 ### FastAPI
 
@@ -48,18 +50,18 @@ auth = FastAPIAuth(
 auth.init_app(app)
 register_exception_handlers(app)
 
-# 公开页面
+# Public page
 @app.get("/")
 async def index(request: Request):
     user = await auth.current_user(request)
     return {"authenticated": user.is_authenticated}
 
-# 需要登录
+# Requires login
 @app.get("/profile")
 async def profile(user=auth.require_user()):
     return {"name": user.local_user.display_name}
 
-# 需要特定 group
+# Requires specific group
 @app.get("/admin")
 async def admin(user=auth.require_group("admins")):
     return {"message": "Welcome, admin!"}
@@ -83,20 +85,20 @@ auth = FlaskAuth(
 
 auth.init_app(app)
 
-# 公开页面
+# Public page
 @app.route("/")
 def index():
     user = auth.current_user()
     return {"authenticated": user.is_authenticated}
 
-# 需要登录
+# Requires login
 @app.route("/profile")
 @auth.login_required()
 def profile():
     user = auth.current_user()
     return {"name": user.local_user.display_name}
 
-# 需要特定 group
+# Requires specific group
 @app.route("/admin")
 @auth.require_group("admins")
 def admin():
@@ -104,9 +106,9 @@ def admin():
     return {"message": "Welcome, admin!"}
 ```
 
-## Authelia Client 配置要求
+## Authelia Client Configuration
 
-在 Authelia 中为您的应用注册 OIDC client：
+Register an OIDC client in Authelia for your application:
 
 ```yaml
 identity_providers:
@@ -125,12 +127,12 @@ identity_providers:
           - groups
 ```
 
-**重要**：`redirect_uris` 必须与 `base_url + callback_path` 完全一致。
+**Important**: `redirect_uris` must exactly match `base_url + callback_path`.
 
-## 获取用户名（username / preferred_username）
+## Retrieving the Username (preferred_username)
 
-**Authelia 默认只在 ID token 里返回 `sub`（UUID），不包含 `preferred_username`。**
-如果你需要在 `UserStore.create_from_identity` 中拿到用户名（例如按用户名匹配已有账号），必须开启 `auto_fetch_userinfo=True`，让 oidc_authkit 在 callback 阶段额外请求 userinfo endpoint，并将 `preferred_username` 等字段合并到 `identity.claims` 中。
+**By default, Authelia only returns `sub` (UUID) in the ID token and does not include `preferred_username`.**
+If you need the username in `UserStore.create_from_identity` (e.g., to match existing accounts), you must enable `auto_fetch_userinfo=True`. This makes oidc_authkit send an additional request to the userinfo endpoint during callback and merge fields like `preferred_username` into `identity.claims`.
 
 ```python
 auth = FastAPIAuth(
@@ -139,66 +141,66 @@ auth = FastAPIAuth(
     client_secret="...",
     base_url="...",
     secret_key="...",
-    auto_fetch_userinfo=True,   # 必须开启，否则 identity.username 为 None
+    auto_fetch_userinfo=True,   # Required, otherwise identity.username is None
 )
 ```
 
-开启后，`identity.username`（即 `identity.claims.preferred_username`）将包含 Authelia 用户名，可直接用于数据库匹配：
+Once enabled, `identity.username` (i.e., `identity.claims.preferred_username`) will contain the Authelia username and can be used directly for database matching:
 
 ```python
 async def create_from_identity(self, identity: ExternalIdentity) -> LocalUser:
-    username = identity.username  # 开启 auto_fetch_userinfo 后有值
+    username = identity.username  # Available when auto_fetch_userinfo is enabled
     user = db.query(User).filter(User.username == username).first()
     ...
 ```
 
-如果不开启 `auto_fetch_userinfo`，`identity.claims.raw` 里只有 `sub`（UUID 格式），无法匹配业务系统的用户名。
+Without `auto_fetch_userinfo`, `identity.claims.raw` only contains `sub` (UUID format), which cannot be used to match usernames in your application.
 
 ---
 
-## 配置说明
+## Configuration
 
-### 核心配置
+### Core
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `issuer` | OIDC Provider URL | 必填 |
-| `client_id` | OIDC Client ID | 必填 |
-| `client_secret` | OIDC Client Secret | 必填 |
-| `base_url` | 应用外部访问 URL | 必填 |
-| `secret_key` | Session 签名密钥 (≥16字符) | 必填 |
-| `auto_fetch_userinfo` | 登录回调时额外请求 userinfo endpoint，将 `preferred_username`、`email`、`name` 合并到 claims | `False` |
-| `callback_path` | 回调路径 | `/oidc/callback` |
-| `login_path` | 登录路径 | `/oidc/login` |
-| `logout_path` | 登出路径 | `/oidc/logout` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `issuer` | OIDC Provider URL | Required |
+| `client_id` | OIDC Client ID | Required |
+| `client_secret` | OIDC Client Secret | Required |
+| `base_url` | Application external URL | Required |
+| `secret_key` | Session signing key (>=16 chars) | Required |
+| `auto_fetch_userinfo` | Fetch userinfo endpoint on callback, merging `preferred_username`, `email`, `name` into claims | `False` |
+| `callback_path` | Callback path | `/oidc/callback` |
+| `login_path` | Login path | `/oidc/login` |
+| `logout_path` | Logout path | `/oidc/logout` |
 | `scopes` | OIDC scopes | `["openid", "profile", "email", "groups"]` |
-| `token_endpoint_auth_method` | Token 端点客户端认证方式，可选 `client_secret_basic` 或 `client_secret_post` | `client_secret_basic` |
-| `allow_anonymous` | 是否允许匿名 | `True` |
+| `token_endpoint_auth_method` | Token endpoint auth method: `client_secret_basic` or `client_secret_post` | `client_secret_basic` |
+| `allow_anonymous` | Allow anonymous access | `True` |
 
-### Session / Cookie 配置
+### Session / Cookie
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `cookie_name` | Cookie 名称 | `oidc_authkit_session` |
-| `cookie_secure` | Secure 标志 | `True` |
-| `cookie_http_only` | HttpOnly 标志 | `True` |
-| `same_site` | SameSite 策略 | `lax` |
-| `max_age_seconds` | Session 最大存活时间 | `86400` (24h) |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `cookie_name` | Cookie name | `oidc_authkit_session` |
+| `cookie_secure` | Secure flag | `True` |
+| `cookie_http_only` | HttpOnly flag | `True` |
+| `same_site` | SameSite policy | `lax` |
+| `max_age_seconds` | Session max age | `86400` (24h) |
 
-### 本地用户映射
+### Local User Mapping
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `create_user_if_missing` | 自动创建本地用户 | `True` |
-| `update_profile_on_login` | 登录时更新 profile | `True` |
-| `username_claim` | 用户名来源 claim | `preferred_username` |
-| `email_claim` | 邮箱来源 claim | `email` |
-| `display_name_claim` | 显示名来源 claim | `name` |
-| `groups_claim` | 组来源 claim | `groups` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `create_user_if_missing` | Auto-create local user | `True` |
+| `update_profile_on_login` | Update profile on login | `True` |
+| `username_claim` | Claim used for username | `preferred_username` |
+| `email_claim` | Claim used for email | `email` |
+| `display_name_claim` | Claim used for display name | `name` |
+| `groups_claim` | Claim used for groups | `groups` |
 
-## 自定义 UserStore
+## Custom UserStore
 
-实现 `UserStore` 协议，替换默认的 `InMemoryUserStore`：
+Implement the `UserStore` protocol to replace the default `InMemoryUserStore`:
 
 ```python
 from oidc_authkit.domain.interfaces import UserStore
@@ -206,74 +208,74 @@ from oidc_authkit.domain.models import ExternalIdentity, LocalUser
 
 class MyDatabaseUserStore:
     async def get_by_external_identity(self, issuer: str, subject: str) -> LocalUser | None:
-        # 查询你的数据库
+        # Query your database
         ...
 
     async def create_from_identity(self, identity: ExternalIdentity) -> LocalUser:
-        # 创建用户记录
+        # Create a user record
         ...
 
     async def update_from_identity(self, user: LocalUser, identity: ExternalIdentity) -> LocalUser:
-        # 更新用户记录
+        # Update a user record
         ...
 
     async def get_by_id(self, user_id: str | int) -> LocalUser | None:
-        # 按 ID 查询
+        # Look up by ID
         ...
 
-# 在初始化时传入
+# Pass it during initialization
 auth = FastAPIAuth(
     ...,
     user_store=MyDatabaseUserStore(),
 )
 ```
 
-## 常见错误排查
+## Troubleshooting
 
 ### "Invalid auth configuration"
-检查配置项是否完整，特别是 `base_url` 和 `issuer` 是否为有效 URL，`secret_key` 是否足够长。
+Verify that all required fields are set, especially that `base_url` and `issuer` are valid URLs and `secret_key` is long enough.
 
 ### "OIDC state parameter mismatch"
-- 检查 cookie 设置是否正常（`SameSite`, `Secure` 等）
-- 检查浏览器是否阻止了第三方 cookie
-- 确认 callback URL 与 Authelia 配置一致
+- Check cookie settings (`SameSite`, `Secure`, etc.)
+- Check whether the browser is blocking third-party cookies
+- Confirm the callback URL matches the Authelia configuration
 
 ### "Failed to fetch OIDC discovery document"
-确认 `issuer` URL 可达，OIDC Discovery endpoint 正常。
+Verify that the `issuer` URL is reachable and the OIDC Discovery endpoint is responding.
 
-### 登录成功但 `identity.username` 为 None，导致 DB INSERT 失败或匹配到错误账号
-Authelia 默认不在 ID token 中包含 `preferred_username`，需要开启 `auto_fetch_userinfo=True`。详见[获取用户名](#获取用户名username--preferred_username)章节。
+### Login succeeds but `identity.username` is None
+Authelia does not include `preferred_username` in the ID token by default. Enable `auto_fetch_userinfo=True`. See [Retrieving the Username](#retrieving-the-username-preferred_username).
 
-### 登录后没有回到原页面
-检查 `return_to` 参数是否为安全的同站路径。外部 URL 会被拒绝以防止 open redirect。
+### User is not redirected back to the original page after login
+Check that the `return_to` parameter is a safe same-site path. External URLs are rejected to prevent open redirects.
 
-## 架构概览
+## Architecture
 
 ```
 oidc_authkit/
-├── config/          # 配置模型和校验
-├── domain/          # 领域模型、错误、接口
-├── protocol/        # OIDC 协议处理（state, nonce, claims）
-├── application/     # 应用服务层（登录、回调、当前用户）
-├── infrastructure/  # 基础设施（OIDC client, session, user store）
-├── adapters/        # 框架适配器（FastAPI, Flask）
-├── permissions/     # 权限检查
-└── hooks/           # 生命周期事件钩子
+├── config/          # Configuration models and validation
+├── domain/          # Domain models, errors, interfaces
+├── protocol/        # OIDC protocol handling (state, nonce, claims)
+├── application/     # Application services (login, callback, current user)
+├── infrastructure/  # Infrastructure (OIDC client, session, user store)
+├── adapters/        # Framework adapters (FastAPI, Flask)
+├── permissions/     # Permission checks
+└── hooks/           # Lifecycle event hooks
 ```
 
-## 开发
+## Development
 
 ```bash
-# 安装开发依赖
+# Install dev dependencies
 pip install -e ".[dev,all]"
 
-# 运行测试
+# Run tests
 pytest
 
-# 类型检查
+# Type checking
 mypy oidc_authkit
 
-# 代码格式化
+# Lint
 ruff check oidc_authkit tests
 ```
 
